@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: speech_recognition/tts
+title: 中文语音合成 (TTS) 模块
+scope:
+    - components/esp-sr/esp-tts/
+source_files: []
+depends_on: []
+related_to:
+    - path: app_main/audio_speech

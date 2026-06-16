@@ -355,5 +355,5 @@ void tcp_server_init(void)
 {
     client_sock_mutex = xSemaphoreCreateMutex();
     spiffs_init();   // 确保 SPIFFS 已挂载
-    xTaskCreate(tcp_server_task, "tcp_server", 6 * 1024, NULL, 4, NULL);
+    xTaskCreate(tcp_server_task, "tcp_server", 8 * 1024, NULL, 4, NULL);
 }

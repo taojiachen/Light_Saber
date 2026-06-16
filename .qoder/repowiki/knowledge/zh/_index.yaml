@@ -1,0 +1,151 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+exported_at: "2026-06-16T03:51:13Z"
+modules:
+    "":
+        dir_name: ESP32-S3 智能光剑固件工程
+        title: ESP32-S3 智能光剑固件工程
+        scope:
+            - CMakeLists.txt
+            - sdkconfig.defaults
+            - sdkconfig.old
+            - partitions.csv
+            - dependencies.lock
+            - .gitignore
+            - sdkconfig
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    app_main:
+        dir_name: 智能光剑固件主控模块
+        title: 智能光剑固件主控模块
+        scope:
+            - main/
+        source_files: []
+        children:
+            - app_main/ui_io
+            - app_main/sensors
+            - app_main/core_infra
+            - app_main/connectivity
+            - app_main/audio_speech
+        depends_on: []
+        related_to: []
+    app_main/audio_speech:
+        dir_name: 音频编解码与语音识别模块
+        title: 音频编解码与语音识别模块
+        scope:
+            - main/app/audio/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: speech_recognition/speech_recognition_core
+            - path: speech_recognition/tts
+    app_main/connectivity:
+        dir_name: 多协议网络通信与配网模块
+        title: 多协议网络通信与配网模块
+        scope:
+            - main/app/aliyun/
+            - main/app/tcp/
+            - main/app/websocket/
+            - main/app/wifi/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/core_infra
+    app_main/core_infra:
+        dir_name: 录音控制状态机
+        title: 录音控制状态机
+        scope:
+            - main/app/state_machine/
+            - main/main.c
+            - main/CMakeLists.txt
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/connectivity
+    app_main/sensors:
+        dir_name: 传感器姿态感知与角度配置管理
+        title: 传感器姿态感知与角度配置管理
+        scope:
+            - main/app/imu/
+            - main/app/angle/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/ui_io
+    app_main/ui_io:
+        dir_name: LED特效与按键输入模块
+        title: LED特效与按键输入模块
+        scope:
+            - main/app/led_strip/
+            - main/app/key/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/sensors
+    hw_and_protocol_components:
+        dir_name: 硬件抽象与多媒体协议栈
+        title: 硬件抽象与多媒体协议栈
+        scope:
+            - components/IMU/
+            - components/aliyun_mqtt/
+            - components/helix-mp3/
+            - components/libogg-1.3.6/
+            - components/opus-1.5.2/
+            - components/esp_websocket_client/
+            - components/hardware_driver/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    speech_recognition:
+        dir_name: ESP32 语音识别与合成组件
+        title: ESP32 语音识别与合成组件
+        scope:
+            - components/esp-sr/
+        source_files: []
+        children:
+            - speech_recognition/models
+            - speech_recognition/speech_recognition_core
+            - speech_recognition/tts
+        depends_on: []
+        related_to: []
+    speech_recognition/models:
+        dir_name: 语音识别模型资源管理
+        title: 语音识别模型资源管理
+        scope:
+            - components/esp-sr/model/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: speech_recognition/speech_recognition_core
+    speech_recognition/speech_recognition_core:
+        dir_name: 语音识别核心基础服务
+        title: 语音识别核心基础服务
+        scope:
+            - components/esp-sr/src/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/audio_speech
+            - path: speech_recognition/models
+    speech_recognition/tts:
+        dir_name: 中文语音合成 (TTS) 模块
+        title: 中文语音合成 (TTS) 模块
+        scope:
+            - components/esp-sr/esp-tts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_main/audio_speech

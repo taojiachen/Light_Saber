@@ -37,7 +37,6 @@ char mqtt_publish_data2[] = "mqtt subscribe successful";
 char mqtt_publish_data3[] = "mqtt i am esp32";
 static const char *TAG = "APP_ALIYUN_MQTT";
 
-static char current_server_ip[16] = {0};
 static bool shadow_subscribed = false; // 确保只订阅一次
 
 esp_mqtt_client_handle_t client;

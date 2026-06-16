@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: hw_and_protocol_components
+title: 硬件抽象与多媒体协议栈
+scope:
+    - components/IMU/
+    - components/aliyun_mqtt/
+    - components/helix-mp3/
+    - components/libogg-1.3.6/
+    - components/opus-1.5.2/
+    - components/esp_websocket_client/
+    - components/hardware_driver/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: speech_recognition
+title: ESP32 语音识别与合成组件
+scope:
+    - components/esp-sr/
+source_files: []
+depends_on: []
+related_to: []

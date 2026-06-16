@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: app_main/audio_speech
+title: 音频编解码与语音识别模块
+scope:
+    - main/app/audio/
+source_files: []
+depends_on: []
+related_to:
+    - path: speech_recognition/speech_recognition_core
+    - path: speech_recognition/tts

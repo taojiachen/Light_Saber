@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: ""
+title: ESP32-S3 智能光剑固件工程
+scope:
+    - CMakeLists.txt
+    - sdkconfig.defaults
+    - sdkconfig.old
+    - partitions.csv
+    - dependencies.lock
+    - .gitignore
+    - sdkconfig
+source_files: []
+depends_on: []
+related_to: []

@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include <string.h>
+#include <math.h>
 
 static const char *TAG = "LED_EFFECT";
 
@@ -15,7 +16,7 @@ static const char *TAG = "LED_EFFECT";
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
-// 颜色结构体定义
+// 颜色结构体
 typedef struct {
     uint8_t r;
     uint8_t g;
@@ -25,6 +26,7 @@ typedef struct {
 // JSON 解析结构体
 typedef struct {
     int surge_intensity;
+    int sum;          // 用于 type=1 的宽度
 } LedPram_t;
 
 typedef struct {
@@ -33,9 +35,8 @@ typedef struct {
     RGB_t color_st;
     RGB_t color_ed;
     int style;
+    int order;        // 用于 type=1 的方向
     LedPram_t pram;
-    int order;
-    int sum;
 } LedDataConfig_t;
 
 typedef struct {
@@ -49,14 +50,14 @@ static SemaphoreHandle_t g_config_mutex = NULL;
 static bool s_led_paused = false;
 static TaskHandle_t led_task_handle = NULL;
 
-// 配置更新中断标志（volatile 防止优化）
+// 配置更新中断标志
 static volatile bool g_config_changed = false;
 
 // 函数声明
 static void led_effect_type0_style0(LedDataConfig_t data);
 static void led_effect_type0_style1(LedDataConfig_t data);
 static void led_effect_type0_style2(LedDataConfig_t data);
-static void led_effect_type0_style3(LedDataConfig_t data);
+static void led_effect_type0_style3(LedDataConfig_t data);  // 新激光剑脉冲
 static void led_effect_type1(LedDataConfig_t data);
 static LedEffectConfig_t parse_led_effect_json(const char *json_str);
 
@@ -75,12 +76,11 @@ void led_update_config_from_json(const char *json_str) {
     xSemaphoreTake(g_config_mutex, portMAX_DELAY);
     g_led_config = new_config;
     xSemaphoreGive(g_config_mutex);
-    // 通知正在运行的效果立即退出
     g_config_changed = true;
     ESP_LOGI(TAG, "LED config updated from JSON");
 }
 
-// JSON 解析（修正颜色赋值）
+// JSON 解析
 static LedEffectConfig_t parse_led_effect_json(const char *json_str) {
     LedEffectConfig_t config = {0};
     cJSON *root = cJSON_Parse(json_str);
@@ -114,7 +114,7 @@ static LedEffectConfig_t parse_led_effect_json(const char *json_str) {
             cJSON *surge = cJSON_GetObjectItem(pram, "surge_intensity");
             if (cJSON_IsNumber(surge)) config.data.pram.surge_intensity = surge->valueint;
             cJSON *sum = cJSON_GetObjectItem(pram, "sum");
-            if (cJSON_IsNumber(sum)) config.data.sum = sum->valueint;
+            if (cJSON_IsNumber(sum)) config.data.pram.sum = sum->valueint;
         }
     }
     cJSON_Delete(root);
@@ -122,75 +122,62 @@ static LedEffectConfig_t parse_led_effect_json(const char *json_str) {
 }
 
 // ---------- 效果实现 ----------
-// style 0: 两色瞬变闪烁（直接切换，无过渡色）
+
+// style 0: 柔和渐变（呼吸灯）- 在两个颜色之间缓慢正弦变化
 static void led_effect_type0_style0(LedDataConfig_t data) {
-    if (data.cycles <= 0) data.cycles = 1;
-    int cycle_duration = (data.duration > 0) ? (data.duration / data.cycles) : 1000;
-    int half_cycle = cycle_duration / 2;
-    if (half_cycle < 1) half_cycle = 1;
-
-    for (int cycle = 0; cycle < data.cycles; cycle++) {
-        if (g_config_changed) return;
-        // 显示起始色
-        for (int i = 0; i < LED_NUMBERS; i++) {
-            led_spi_set_pixel(i, data.color_st.g, data.color_st.r, data.color_st.b);
-        }
-        led_spi_show();
-        vTaskDelay(pdMS_TO_TICKS(half_cycle));
-        if (g_config_changed) return;
-        // 显示结束色
-        for (int i = 0; i < LED_NUMBERS; i++) {
-            led_spi_set_pixel(i, data.color_ed.g, data.color_ed.r, data.color_ed.b);
-        }
-        led_spi_show();
-        vTaskDelay(pdMS_TO_TICKS(half_cycle));
-        if (g_config_changed) return;
-    }
-    ESP_LOGI(TAG, "Type0 Style0 completed");
-}
-
-// style 1: 活泼跳变（随机抖动）
-static void led_effect_type0_style1(LedDataConfig_t data) {
-    RGB_t start_color = {
-        .r = (data.color_st.r + data.color_ed.r) / 2,
-        .g = (data.color_st.g + data.color_ed.g) / 2,
-        .b = (data.color_st.b + data.color_ed.b) / 2
-    };
-    RGB_t min_color = {
-        .r = MIN(data.color_st.r, data.color_ed.r),
-        .g = MIN(data.color_st.g, data.color_ed.g),
-        .b = MIN(data.color_st.b, data.color_ed.b)
-    };
-    RGB_t max_color = {
-        .r = MAX(data.color_st.r, data.color_ed.r),
-        .g = MAX(data.color_st.g, data.color_ed.g),
-        .b = MAX(data.color_st.b, data.color_ed.b)
-    };
-    int total_steps = data.duration / 10;
-    total_steps = total_steps < 1 ? 1 : total_steps;
-    RGB_t current_color = start_color;
+    int total_steps = data.duration / 20; // 每20ms一步
+    if (total_steps < 1) total_steps = 1;
+    float r_diff = data.color_ed.r - data.color_st.r;
+    float g_diff = data.color_ed.g - data.color_st.g;
+    float b_diff = data.color_ed.b - data.color_st.b;
 
     for (int step = 0; step < total_steps; step++) {
         if (g_config_changed) return;
-        if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); return; }
-        int r_offset = (esp_random() % (2 * data.pram.surge_intensity + 1)) - data.pram.surge_intensity;
-        int g_offset = (esp_random() % (2 * data.pram.surge_intensity + 1)) - data.pram.surge_intensity;
-        int b_offset = (esp_random() % (2 * data.pram.surge_intensity + 1)) - data.pram.surge_intensity;
-        current_color.r = (uint8_t)CLAMP(current_color.r + r_offset, min_color.r, max_color.r);
-        current_color.g = (uint8_t)CLAMP(current_color.g + g_offset, min_color.g, max_color.g);
-        current_color.b = (uint8_t)CLAMP(current_color.b + b_offset, min_color.b, max_color.b);
+        if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+        // 使用正弦波实现平滑过渡 (0~PI)
+        float phase = (float)step / total_steps * 3.14159f;
+        float sin_val = (sinf(phase) + 1.0f) / 2.0f; // 0~1
+        uint8_t r = data.color_st.r + r_diff * sin_val;
+        uint8_t g = data.color_st.g + g_diff * sin_val;
+        uint8_t b = data.color_st.b + b_diff * sin_val;
         for (int i = 0; i < LED_NUMBERS; i++) {
-            led_spi_set_pixel(i, current_color.g, current_color.r, current_color.b);
+            led_spi_set_pixel(i, g, r, b); // 注意顺序：实际函数参数是 (index, g, r, b)
         }
         led_spi_show();
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
-    // 最后设置为 end_color
+    // 最终设为结束色
     for (int i = 0; i < LED_NUMBERS; i++) {
         led_spi_set_pixel(i, data.color_ed.g, data.color_ed.r, data.color_ed.b);
     }
     led_spi_show();
-    ESP_LOGI(TAG, "Type0 Style1 completed");
+    ESP_LOGI(TAG, "Type0 Style0 (breath) completed");
+}
+
+// style 1: 活泼跳变（快速切换两色）
+static void led_effect_type0_style1(LedDataConfig_t data) {
+    if (data.cycles <= 0) data.cycles = 1;
+    int cycle_duration = data.duration / data.cycles;
+    int half = cycle_duration / 2;
+    if (half < 1) half = 1;
+
+    for (int c = 0; c < data.cycles; c++) {
+        if (g_config_changed) return;
+        // 起始色
+        for (int i = 0; i < LED_NUMBERS; i++) {
+            led_spi_set_pixel(i, data.color_st.g, data.color_st.r, data.color_st.b);
+        }
+        led_spi_show();
+        vTaskDelay(pdMS_TO_TICKS(half));
+        if (g_config_changed) return;
+        // 结束色
+        for (int i = 0; i < LED_NUMBERS; i++) {
+            led_spi_set_pixel(i, data.color_ed.g, data.color_ed.r, data.color_ed.b);
+        }
+        led_spi_show();
+        vTaskDelay(pdMS_TO_TICKS(half));
+    }
+    ESP_LOGI(TAG, "Type0 Style1 (quick flash) completed");
 }
 
 // style 2: 奇幻波浪（流水灯/拖尾）
@@ -198,26 +185,25 @@ static void led_effect_type0_style2(LedDataConfig_t data) {
     int tail_len = data.pram.surge_intensity;
     if (tail_len < 1) tail_len = 3;
     if (tail_len > LED_NUMBERS) tail_len = LED_NUMBERS;
-    
+
     int total_steps = LED_NUMBERS + tail_len - 1;
     int step_duration = (data.duration / data.cycles) / total_steps;
     if (step_duration < 1) step_duration = 1;
-    
+
     float r_step = (float)(data.color_ed.r - data.color_st.r) / total_steps;
     float g_step = (float)(data.color_ed.g - data.color_st.g) / total_steps;
     float b_step = (float)(data.color_ed.b - data.color_st.b) / total_steps;
-    
+
     for (int cycle = 0; cycle < data.cycles; cycle++) {
         if (g_config_changed) return;
         RGB_t current_color = data.color_st;
         for (int step = 0; step < total_steps; step++) {
             if (g_config_changed) return;
-            if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); return; }
-            current_color.r = (uint8_t)CLAMP(current_color.r + r_step, 0, 255);
-            current_color.g = (uint8_t)CLAMP(current_color.g + g_step, 0, 255);
-            current_color.b = (uint8_t)CLAMP(current_color.b + b_step, 0, 255);
-            
-            // 清空所有 LED（黑色背景）
+            if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+            current_color.r = CLAMP(current_color.r + r_step, 0, 255);
+            current_color.g = CLAMP(current_color.g + g_step, 0, 255);
+            current_color.b = CLAMP(current_color.b + b_step, 0, 255);
+            // 清空
             for (int i = 0; i < LED_NUMBERS; i++) {
                 led_spi_set_pixel(i, 0, 0, 0);
             }
@@ -235,68 +221,55 @@ static void led_effect_type0_style2(LedDataConfig_t data) {
             vTaskDelay(pdMS_TO_TICKS(step_duration));
         }
     }
-    ESP_LOGI(TAG, "Type0 Style2 completed");
+    ESP_LOGI(TAG, "Type0 Style2 (wave) completed");
 }
 
-// style 3: 科技脉冲（高频爆闪）
+// style 3: 激光剑脉冲 - 在给定颜色附近随机波动
 static void led_effect_type0_style3(LedDataConfig_t data) {
-    int flash_interval = 20;   // 20ms 闪一次（50Hz）
-    int total_flashes = (data.duration / flash_interval) / 2;
-    if (total_flashes < 1) total_flashes = 1;
-    
-    RGB_t color_a = data.color_st;
-    RGB_t color_b = data.color_ed;
-    bool use_brightness = (color_a.r == color_b.r && color_a.g == color_b.g && color_a.b == color_b.b);
-    int intensity = data.pram.surge_intensity;
-    if (intensity < 0) intensity = 0;
-    if (intensity > 100) intensity = 100;
-    
-    for (int i = 0; i < total_flashes; i++) {
+    // 基础颜色取 color_st 和 color_ed 的平均值（或直接用 color_st）
+    RGB_t base_color = {
+        .r = (data.color_st.r + data.color_ed.r) / 2,
+        .g = (data.color_st.g + data.color_ed.g) / 2,
+        .b = (data.color_st.b + data.color_ed.b) / 2
+    };
+    // 波动幅度由 surge_intensity 控制 (0~100) 映射到 0~30
+    int amplitude = data.pram.surge_intensity * 30 / 100;
+    if (amplitude < 1) amplitude = 1;
+    if (amplitude > 30) amplitude = 30;
+
+    int total_steps = data.duration / 20; // 每20ms更新一次
+    if (total_steps < 1) total_steps = 1;
+
+    for (int step = 0; step < total_steps; step++) {
         if (g_config_changed) return;
-        if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); return; }
-        // 亮状态
-        if (use_brightness) {
-            uint8_t r = color_a.r * intensity / 100;
-            uint8_t g = color_a.g * intensity / 100;
-            uint8_t b = color_a.b * intensity / 100;
-            for (int led = 0; led < LED_NUMBERS; led++) {
-                led_spi_set_pixel(led, g, r, b);
-            }
-        } else {
-            for (int led = 0; led < LED_NUMBERS; led++) {
-                led_spi_set_pixel(led, color_a.g, color_a.r, color_a.b);
-            }
+        if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+        // 在基色上叠加随机偏移 (-amplitude ~ +amplitude)
+        int r_offset = (esp_random() % (2 * amplitude + 1)) - amplitude;
+        int g_offset = (esp_random() % (2 * amplitude + 1)) - amplitude;
+        int b_offset = (esp_random() % (2 * amplitude + 1)) - amplitude;
+        uint8_t r = CLAMP(base_color.r + r_offset, 0, 255);
+        uint8_t g = CLAMP(base_color.g + g_offset, 0, 255);
+        uint8_t b = CLAMP(base_color.b + b_offset, 0, 255);
+        for (int i = 0; i < LED_NUMBERS; i++) {
+            led_spi_set_pixel(i, g, r, b);
         }
         led_spi_show();
-        vTaskDelay(pdMS_TO_TICKS(flash_interval));
-        if (g_config_changed) return;
-        // 暗状态（或切换到结束色）
-        if (use_brightness) {
-            for (int led = 0; led < LED_NUMBERS; led++) {
-                led_spi_set_pixel(led, 0, 0, 0);
-            }
-        } else {
-            for (int led = 0; led < LED_NUMBERS; led++) {
-                led_spi_set_pixel(led, color_b.g, color_b.r, color_b.b);
-            }
-        }
-        led_spi_show();
-        vTaskDelay(pdMS_TO_TICKS(flash_interval));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
-    // 最终保持结束色
-    for (int led = 0; led < LED_NUMBERS; led++) {
-        led_spi_set_pixel(led, color_b.g, color_b.r, color_b.b);
+    // 最后回到基色
+    for (int i = 0; i < LED_NUMBERS; i++) {
+        led_spi_set_pixel(i, base_color.g, base_color.r, base_color.b);
     }
     led_spi_show();
-    ESP_LOGI(TAG, "Type0 Style3 completed");
+    ESP_LOGI(TAG, "Type0 Style3 (lightsaber pulse) completed");
 }
 
-// type 1: 流水跑马灯（原有）
+// type 1: 流水跑马灯（保留原实现）
 static void led_effect_type1(LedDataConfig_t data) {
     if (data.cycles <= 0) data.cycles = 1;
     if (data.duration <= 0) data.duration = 1000;
     int cycle_duration = data.duration / data.cycles;
-    int sum = (data.sum < 1) ? 3 : data.sum;
+    int sum = (data.pram.sum < 1) ? 3 : data.pram.sum;
     sum = (sum > LED_NUMBERS) ? LED_NUMBERS : sum;
     int order = (data.order != 0 && data.order != 1) ? 0 : data.order;
     int style = (data.style != 0 && data.style != 1) ? 0 : data.style;
@@ -347,12 +320,11 @@ static void led_effect_type1(LedDataConfig_t data) {
 
         for (int step = 0; step < flow_steps; step++) {
             if (g_config_changed) return;
-            if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); return; }
+            if (s_led_paused) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
             int center_pos;
             if (order == 0) center_pos = step;
             else center_pos = LED_NUMBERS - 1 - step;
 
-            // 重置所有 LED 为起始色或保留色
             if (style == 0) {
                 for (int i = 0; i < LED_NUMBERS; i++) {
                     led_spi_set_pixel(i, data.color_st.g, data.color_st.r, data.color_st.b);
@@ -364,7 +336,6 @@ static void led_effect_type1(LedDataConfig_t data) {
                 }
             }
 
-            // 绘制中心区域
             for (int offset = -(sum/2); offset <= sum/2; offset++) {
                 int pixel_idx = center_pos + offset;
                 if (pixel_idx < 0 || pixel_idx >= LED_NUMBERS) continue;
@@ -372,12 +343,7 @@ static void led_effect_type1(LedDataConfig_t data) {
                     if ((order == 0 && pixel_idx >= retain_start) || (order == 1 && pixel_idx <= retain_end))
                         continue;
                 }
-                RGB_t draw_color;
-                if (offset == 0) {
-                    draw_color = data.color_ed;
-                } else {
-                    draw_color = mid_color;
-                }
+                RGB_t draw_color = (offset == 0) ? data.color_ed : mid_color;
                 led_spi_set_pixel(pixel_idx, draw_color.g, draw_color.r, draw_color.b);
             }
             led_spi_show();
@@ -405,7 +371,6 @@ static void led_task(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
-        // 如果有配置更新标志，先清除（因为即将开始新效果）
         if (g_config_changed) {
             g_config_changed = false;
             ESP_LOGI(TAG, "Config changed, restart effect");

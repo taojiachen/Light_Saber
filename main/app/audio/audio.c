@@ -870,7 +870,7 @@ esp_err_t audio_init()
     BaseType_t ret_val = xTaskCreatePinnedToCore(
         audio_encoder_task,
         "audio_encoder_task",
-        14 * 1024,
+        16 * 1024,
         NULL,
         4,
         &audio_encoder_task_handle,

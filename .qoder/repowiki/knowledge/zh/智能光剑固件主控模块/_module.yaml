@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: app_main
+title: 智能光剑固件主控模块
+scope:
+    - main/
+source_files: []
+depends_on: []
+related_to: []

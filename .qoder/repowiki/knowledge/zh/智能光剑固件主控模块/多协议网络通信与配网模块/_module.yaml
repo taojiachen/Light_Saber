@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: app_main/connectivity
+title: 多协议网络通信与配网模块
+scope:
+    - main/app/aliyun/
+    - main/app/tcp/
+    - main/app/websocket/
+    - main/app/wifi/
+source_files: []
+depends_on: []
+related_to:
+    - path: app_main/core_infra

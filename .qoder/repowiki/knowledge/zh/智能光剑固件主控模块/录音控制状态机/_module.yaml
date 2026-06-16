@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: app_main/core_infra
+title: 录音控制状态机
+scope:
+    - main/app/state_machine/
+    - main/main.c
+    - main/CMakeLists.txt
+source_files: []
+depends_on: []
+related_to:
+    - path: app_main/connectivity
