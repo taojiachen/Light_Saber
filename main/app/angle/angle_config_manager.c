@@ -183,7 +183,7 @@ static void angle_monitor_task(void *pv) {
             if (new_cfg && strcmp(new_cfg, g_current_active_config) != 0) {
                 ESP_LOGI(TAG, "Switch config: pitch=%.1f roll=%.1f", pitch, roll);
                 led_update_config_from_json(new_cfg);
-                // audio_play_opus_file("dc");
+                audio_play_opus_file("dc");
                 strncpy(g_current_active_config, new_cfg, sizeof(g_current_active_config));
             }
             free(new_cfg);
@@ -199,6 +199,6 @@ esp_err_t angle_config_manager_init(void) {
         g_default_config = strdup(default_json);
         save_config_to_file();
     }
-    xTaskCreate(angle_monitor_task, "angle_monitor", 4 * 1024, NULL, 5, NULL);
+    xTaskCreate(angle_monitor_task, "angle_monitor", 8 * 1024, NULL, 5, NULL);
     return ESP_OK;
 }

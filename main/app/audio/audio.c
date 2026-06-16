@@ -903,23 +903,23 @@ esp_err_t audio_init()
     //     ESP_LOGI(TAG, "Audio decoder task created successfully");
     // }
 
-    ret_val = xTaskCreatePinnedToCore(
-        audio_decoder_task,
-        "audio_decoder_task",
-        8 * 1024,
-        NULL,
-        5,
-        &audio_decoder_task_handle,
-        1);
+    // ret_val = xTaskCreatePinnedToCore(
+    //     audio_decoder_task,
+    //     "audio_decoder_task",
+    //     8 * 1024,
+    //     NULL,
+    //     5,
+    //     &audio_decoder_task_handle,
+    //     1);
 
-    if (ret_val != pdPASS)
-    {
-        ESP_LOGE(TAG, "Failed to create audio decoder task");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Audio decoder task created successfully");
-    }
+    // if (ret_val != pdPASS)
+    // {
+    //     ESP_LOGE(TAG, "Failed to create audio decoder task");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "Audio decoder task created successfully");
+    // }
 
     return ESP_OK;
 }
